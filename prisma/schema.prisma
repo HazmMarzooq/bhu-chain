@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  password     String
+  role         String   // CITIZEN, SUB_REGISTRAR, REVENUE_OFFICER, BANK_OFFICER, AUDITOR, ADMIN
+  designation  String?
+  officeId     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Parcel {
+  id                  String   @id @default(uuid())
+  ulpin               String   @unique // Bhu-Aadhaar 14-digit alphanumeric
+  state               String   @default("Tamil Nadu")
+  district            String
+  taluk               String
+  village             String
+  surveyNumber        String
+  subdivisionNumber   String
+  areaInSqMeters      Float
+  landType            String   // AGRICULTURAL, RESIDENTIAL, COMMERCIAL, INDUSTRIAL
+  mapReferenceHash    String   // SHA-256 of GIS shapefile / coordinates
+  latitude            Float?
+  longitude           Float?
+  ownerName           String   // Current approved owner
+  ownerIdentityHash   String   // SHA-256 hash of national ID (NO raw ID stored)
+  ownerContactMasked  String   // e.g. +91 98*** **456
+  status              String   @default("APPROVED") // PENDING, APPROVED, ENCUMBERED, DISPUTED
+  encumbranceStatus   String   @default("NONE") // NONE, MORTGAGED, LIEN
+  encumbranceBank     String?
+  disputeStatus       String   @default("NONE") // NONE, ACTIVE_DISPUTE, RESOLVED
+  disputeDetails      String?
+  lastMutationDate    DateTime @default(now())
+  qrCodeUrl           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  events              BlockchainEvent[]
+  requests            WorkflowRequest[]
+}
+
+model BlockchainEvent {
+  id                   String   @id @default(uuid())
+  eventId              String   @unique // Cryptographic event ID
+  blockNumber          Int      // Incremental block index
+  ulpin                String
+  eventType            String   // PARCEL_REGISTRATION, SALE_DEED, INHERITANCE, GIFT_DEED, MORTGAGE, PLEDGE_RELEASE, COURT_LIEN, DISPUTE_FLAG, MUTATION_APPROVAL, RECORD_CORRECTION
+  previousOwnerHash    String   // Genesis or previous owner SHA-256
+  newOwnerHash         String   // New owner SHA-256
+  documentHash         String   // SHA-256 of deed/order document
+  documentTitle        String   // Display title
+  registrationOfficeId String   // SRO Office Code
+  approverDigitalId    String   // Authorized officer digital credential
+  approvalTimestamp    DateTime @default(now())
+  previousEventHash    String   // Parent block hash for cryptographic immutability
+  currentRecordHash    String   // Hash of this entire block's state
+  digitalSignature     String   // Cryptographic signature placeholder
+  metadataJson         String?  // Non-sensitive metadata JSON
+  createdAt            DateTime @default(now())
+
+  parcel               Parcel   @relation(fields: [ulpin], references: [ulpin], onDelete: Cascade)
+
+  @@index([ulpin])
+  @@index([blockNumber])
+}
+
+model WorkflowRequest {
+  id                   String   @id @default(uuid())
+  ulpin                String
+  requestType          String   // SALE, MORTGAGE, PLEDGE_RELEASE, DISPUTE, ONBOARDING
+  status               String   @default("PENDING_REGISTRAR") // PENDING_REGISTRAR, PENDING_REVENUE, APPROVED, REJECTED
+  requestedByUserId    String
+  requestedByName      String
+  sellerName           String?
+  buyerName            String?
+  buyerIdentityHash    String?
+  bankName             String?
+  loanAmount           Float?
+  disputeReason        String?
+  documentTitle        String?
+  documentHash         String?
+  remarks              String?
+  rejectionReason      String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  parcel               Parcel   @relation(fields: [ulpin], references: [ulpin], onDelete: Cascade)
+
+  @@index([ulpin])
+  @@index([status])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String   // E.g. LOGIN, PARCEL_SEARCH, DOCUMENT_VERIFIED, SALE_INITIATED, MUTATION_APPROVED, etc.
+  performedBy String   // User name or 'PUBLIC_CITIZEN'
+  userRole    String   // Role
+  ulpin       String?
+  details     String   // Description
+  ipAddress   String   @default("127.0.0.1")
+  timestamp   DateTime @default(now())
+
+  @@index([ulpin])
+  @@index([timestamp])
+}
